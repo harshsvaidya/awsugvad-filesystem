@@ -1,0 +1,1278 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+/* Supplies animate-in / fade-in / zoom-in / slide-in-from-*. The Radix
+   primitives have always carried those classes, but Tailwind v4 takes its
+   plugins from here rather than a config file, and this one was never
+   imported - so every one of them compiled to nothing and menus, dialogs
+   and popovers all appeared instantly. */
+@import 'tw-animate-css';
+
+:root {
+  --background: #ffffff;
+  --card: #ffffff;
+  /* Elevated surfaces that float over the page: menus, dropdowns, popovers.
+     The shared dropdown primitive asks for this by name and nothing defined
+     it, so every menu rendered with no background at all. */
+  --popover: #ffffff;
+  --secondary: #f8fafd;
+  --accent: #e8f0fe;
+
+  --foreground: #3c4043;
+  --secondary-foreground: #5f6368;
+  --accent-foreground: #1a73e8;
+  --card-foreground: #3c4043;
+  --popover-foreground: #3c4043;
+
+  --primary: #1a73e8;
+  --primary-foreground: #ffffff;
+
+  --border: #e8eaed;
+  --input: #f1f3f4;
+
+  --muted: #f8f9fa;
+  --muted-foreground: #5f6368;
+  --geo-map: #000000;
+  --top-loading-bar-color: #1a73e8;
+
+  --progress-track: #e8eaed;
+  --progress-thumb: #1a73e8;
+  --volume-track: #e8eaed;
+  --control-hover: #f1f3f4;
+  --player-glow: 0 0 20px rgba(26, 115, 232, 0.3);
+  --wave-color: rgba(26, 115, 232, 0.4);
+
+  --settings-sidebar-bg: #f8f9fa;
+  --settings-sidebar-border: #e8eaed;
+  --settings-radio-border: #dadce0;
+  --settings-radio-hover: #f1f3f4;
+
+  --item-count-bg: rgba(60, 64, 67, 0.08);
+  --item-count-text: #5f6368;
+  --item-count-border: rgba(60, 64, 67, 0.12);
+  --show-more-btn-bg: #1a73e8;
+  --show-more-btn-hover: #1557b0;
+  --show-more-btn-disabled: #dadce0;
+  --show-more-btn-text: #ffffff;
+  --show-more-btn-text-disabled: #9aa0a6;
+
+  /* Custom Aria Label Variables */
+  --aria-label-bg: rgba(60, 64, 67, 0.9);
+  --aria-label-text: #ffffff;
+  --aria-label-border: rgba(255, 255, 255, 0.1);
+  --aria-label-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  --aria-label-backdrop: blur(12px);
+
+  /* Community card - Discord brand stays fixed, status colours follow theme */
+  --discord-brand: #5865f2;
+  --discord-brand-hover: #4752c4;
+  --discord-brand-foreground: #ffffff;
+  --community-live: #1e8e3e;
+  --community-diff-add: #1e8e3e;
+  --community-diff-remove: #d93025;
+
+  /* Status colours used by the connect wizard stepper and badges */
+  --success: #1e8e3e;
+  --success-foreground: #ffffff;
+  --success-surface: #e6f4ea;
+
+  /* Informational banner, softer than a warning and calmer than primary */
+  --info-surface: #e8f0fe;
+  --info-border: #d2e3fc;
+  --info-foreground: #174ea6;
+
+  /* A row resting inside a card. Needed because --muted and --card are the
+     same value in dark mode, so a muted row on a card is invisible there. */
+  --surface-sunken: #f8f9fa;
+
+  /* Wizard chrome: the step rail dots and connectors */
+  --step-track: #e8eaed;
+  --step-pending-border: #dadce0;
+
+  /* Storage provider brand marks. Fixed across themes, like --discord-brand,
+     because a brand colour is not a theme colour. The -soft variants are
+     alpha tints so they sit correctly on either background. */
+  --provider-aws: #ff9900;
+  --provider-aws-soft: rgba(255, 153, 0, 0.14);
+  --provider-r2: #f6821f;
+  --provider-r2-soft: rgba(246, 130, 31, 0.14);
+  --provider-wasabi: #00a651;
+  --provider-wasabi-soft: rgba(0, 166, 81, 0.14);
+  --provider-b2: #e21e29;
+  --provider-b2-soft: rgba(226, 30, 41, 0.14);
+  --provider-minio: #c72e49;
+  --provider-minio-soft: rgba(199, 46, 73, 0.14);
+  /* The custom-endpoint tile. No vendor, so no brand colour, and unlike the
+     five above it does follow the theme - it should read as part of our UI
+     rather than as a sixth logo. The glyph tracks --muted-foreground, which
+     var() resolves per theme; the tint is a neutral alpha that lifts on a dark
+     card and darkens on a light one. */
+  --provider-custom: var(--muted-foreground);
+  --provider-custom-soft: rgba(128, 134, 139, 0.16);
+  /* The red the shadcn primitives (button, dropdown item, input) reach for.
+     They shipped referencing it, but the palette never defined it, so every
+     `bg-destructive` resolved to nothing and a delete button came out
+     white-on-white. */
+  --destructive: #d93025;
+  --destructive-foreground: #ffffff;
+  /* Tints of the same red, for the surface and border of an error panel.
+     These were a second scale called `danger` holding byte-identical values,
+     which is one retune away from the app having two different reds and no
+     rule for which belongs where. */
+  --destructive-surface: #fce8e6;
+  --destructive-border: #f6aea9;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-geo-map: var(--geo-map);
+  --color-top-loading-bar-color: var(--top-loading-bar-color);
+  --color-discord-brand: var(--discord-brand);
+  --color-discord-brand-hover: var(--discord-brand-hover);
+  --color-discord-brand-foreground: var(--discord-brand-foreground);
+  --color-community-live: var(--community-live);
+  --color-community-diff-add: var(--community-diff-add);
+  --color-community-diff-remove: var(--community-diff-remove);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-surface: var(--success-surface);
+  --color-info-surface: var(--info-surface);
+  --color-info-border: var(--info-border);
+  --color-info-foreground: var(--info-foreground);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-step-track: var(--step-track);
+  --color-step-pending-border: var(--step-pending-border);
+  --color-provider-aws: var(--provider-aws);
+  --color-provider-aws-soft: var(--provider-aws-soft);
+  --color-provider-r2: var(--provider-r2);
+  --color-provider-r2-soft: var(--provider-r2-soft);
+  --color-provider-wasabi: var(--provider-wasabi);
+  --color-provider-wasabi-soft: var(--provider-wasabi-soft);
+  --color-provider-b2: var(--provider-b2);
+  --color-provider-b2-soft: var(--provider-b2-soft);
+  --color-provider-minio: var(--provider-minio);
+  --color-provider-minio-soft: var(--provider-minio-soft);
+  --color-provider-custom: var(--provider-custom);
+  --color-provider-custom-soft: var(--provider-custom-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-border: var(--destructive-border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+[data-theme='dark'] {
+  --background: #131314;
+  --foreground: #e8eaed;
+  --primary: #8ab4f8;
+  --primary-foreground: #202124;
+  --secondary: #1b1b1b;
+  --secondary-foreground: #e8eaed;
+  --muted: #292a2d;
+  --muted-foreground: #9aa0a6;
+  --accent: #303134;
+  --accent-foreground: #8ab4f8;
+  --card: #292a2d;
+  --card-foreground: #e8eaed;
+  --popover: #292a2d;
+  --popover-foreground: #e8eaed;
+  --border: #3c4043;
+  --input: #303134;
+  --geo-map: #5f6368;
+  --top-loading-bar-color: #8ab4f8;
+
+  --progress-track: #3c4043;
+  --progress-thumb: #8ab4f8;
+  --volume-track: #3c4043;
+  --control-hover: #303134;
+  --player-glow: 0 0 20px rgba(138, 180, 248, 0.3);
+  --wave-color: rgba(138, 180, 248, 0.4);
+
+  --settings-sidebar-bg: #1b1b1b;
+  --settings-sidebar-border: #3c4043;
+  --settings-radio-border: #5f6368;
+  --settings-radio-hover: #303134;
+
+  --item-count-bg: rgba(232, 234, 237, 0.08);
+  --item-count-text: #9aa0a6;
+  --item-count-border: rgba(232, 234, 237, 0.12);
+  --show-more-btn-bg: #8ab4f8;
+  --show-more-btn-hover: #aecbfa;
+  --show-more-btn-disabled: #3c4043;
+  --show-more-btn-text: #202124;
+  --show-more-btn-text-disabled: #5f6368;
+
+  /* Custom Aria Label Variables - Auto Dark Mode */
+  --aria-label-bg: rgba(232, 234, 237, 0.9);
+  --aria-label-text: #202124;
+  --aria-label-border: rgba(0, 0, 0, 0.1);
+  --aria-label-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --aria-label-backdrop: blur(12px);
+
+  /* Community card - lighter status colours for dark surfaces */
+  --community-live: #81c995;
+  --community-diff-add: #81c995;
+  --community-diff-remove: #f28b82;
+  /* Status, info and wizard chrome tuned for dark surfaces. Provider brand
+     marks are deliberately absent here: they stay fixed across themes. */
+  --success: #81c995;
+  --success-foreground: #202124;
+  --success-surface: rgba(129, 201, 149, 0.16);
+
+  --info-surface: rgba(138, 180, 248, 0.12);
+  --info-border: rgba(138, 180, 248, 0.28);
+  --info-foreground: #aecbfa;
+
+  --surface-sunken: #202124;
+  --step-track: #3c4043;
+  --step-pending-border: #5f6368;
+
+  /* Pale enough that white text on it fails contrast, so the foreground flips
+     dark here the way --primary-foreground does. */
+  --destructive: #f28b82;
+  --destructive-foreground: #202124;
+  --destructive-surface: rgba(242, 139, 130, 0.14);
+  --destructive-border: rgba(242, 139, 130, 0.32);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --background: #131314;
+    --foreground: #e8eaed;
+    --primary: #8ab4f8;
+    --primary-foreground: #202124;
+    --secondary: #1b1b1b;
+    --secondary-foreground: #e8eaed;
+    --muted: #292a2d;
+    --muted-foreground: #9aa0a6;
+    --accent: #303134;
+    --accent-foreground: #8ab4f8;
+    --card: #292a2d;
+    --card-foreground: #e8eaed;
+    --popover: #292a2d;
+    --popover-foreground: #e8eaed;
+    --border: #3c4043;
+    --input: #303134;
+    --geo-map: #5f6368;
+    --top-loading-bar-color: #8ab4f8;
+
+    --progress-track: #3c4043;
+    --progress-thumb: #8ab4f8;
+    --volume-track: #3c4043;
+    --control-hover: #303134;
+    --player-glow: 0 0 20px rgba(138, 180, 248, 0.3);
+    --wave-color: rgba(138, 180, 248, 0.4);
+
+    --settings-sidebar-bg: #1b1b1b;
+    --settings-sidebar-border: #3c4043;
+    --settings-radio-border: #5f6368;
+    --settings-radio-hover: #303134;
+
+    --item-count-bg: rgba(232, 234, 237, 0.08);
+    --item-count-text: #9aa0a6;
+    --item-count-border: rgba(232, 234, 237, 0.12);
+    --show-more-btn-bg: #8ab4f8;
+    --show-more-btn-hover: #aecbfa;
+    --show-more-btn-disabled: #3c4043;
+    --show-more-btn-text: #202124;
+    --show-more-btn-text-disabled: #5f6368;
+
+    /* Custom Aria Label Variables - Dark Mode */
+    --aria-label-bg: rgba(232, 234, 237, 0.9);
+    --aria-label-text: #202124;
+    --aria-label-border: rgba(0, 0, 0, 0.1);
+    --aria-label-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --aria-label-backdrop: blur(12px);
+
+    /* Community card - lighter status colours for dark surfaces */
+    --community-live: #81c995;
+    --community-diff-add: #81c995;
+    --community-diff-remove: #f28b82;
+    /* Status, info and wizard chrome tuned for dark surfaces. Provider brand
+       marks are deliberately absent here: they stay fixed across themes. */
+    --success: #81c995;
+    --success-foreground: #202124;
+    --success-surface: rgba(129, 201, 149, 0.16);
+
+    --info-surface: rgba(138, 180, 248, 0.12);
+    --info-border: rgba(138, 180, 248, 0.28);
+    --info-foreground: #aecbfa;
+
+    --surface-sunken: #202124;
+    --step-track: #3c4043;
+    --step-pending-border: #5f6368;
+    --destructive: #f28b82;
+    --destructive-foreground: #202124;
+    --destructive-surface: rgba(242, 139, 130, 0.14);
+    --destructive-border: rgba(242, 139, 130, 0.32);
+  }
+}
+
+/*
+ * A pair of artworks, one per theme, chosen the way every colour above is.
+ *
+ * Picking the src in JavaScript cannot work on a server-rendered page: the
+ * server has no way to know the theme, so it sends the light one, and React
+ * keeps the server's attribute through hydration rather than patching it. The
+ * component then computes the right theme, agrees with what it already holds,
+ * and never re-renders - so the light image stays until something else forces
+ * a render, which is why toggling the theme "fixed" it.
+ *
+ * CSS has no such problem. The inline script in the root layout stamps
+ * data-theme before first paint, so the correct one of the pair is the only one
+ * ever painted. The media query underneath is the same fallback the tokens use,
+ * for a first paint that happens without that script.
+ *
+ * Both are in the markup, but only one is fetched: the hidden one is never in
+ * the viewport, so lazy loading never asks for it. Do not mark either `priority`
+ * - that preloads regardless of display, which would download both.
+ */
+.theme-dark-only {
+  display: none;
+}
+
+[data-theme='dark'] .theme-dark-only {
+  display: block;
+}
+
+[data-theme='dark'] .theme-light-only {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .theme-dark-only {
+    display: block;
+  }
+
+  :root:not([data-theme='light']) .theme-light-only {
+    display: none;
+  }
+}
+
+body {
+  background: var(--secondary);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/**
+ * The artwork in the strip that joins the hero to the page below it.
+ *
+ * That strip is the room the fixed mobile bar drops into, so its height is the
+ * bar's and cannot grow. The source is 3.5:1 in a box nearer 7:1, so `cover`
+ * crops to the middle band - which is where the filaments run and where the
+ * mark sits - rather than letterboxing it.
+ *
+ * The file is not the transparent PNG it looks like: every pixel is opaque, and
+ * what should have been transparency was flattened into a flat grey at
+ * luminance 43, with the drawing itself only reaching about 110. Dropped in as
+ * an image it would have replaced the wrong-coloured band this strip exists to
+ * remove with another one, a shade lighter still.
+ *
+ * So the flat grey is turned back into nothing. `contrast(1.62)` pivots on 128
+ * and lands the whole flat field, which wanders up to 47, at or under 0 - black - and `screen` composites black as no
+ * change at all, so the page's own `--background` is what shows between the
+ * filaments. `brightness` afterwards only lifts what survived; it cannot raise
+ * black off zero, so the background stays put however far it is pushed. Replace
+ * the file with a genuinely transparent export and these two filters come off
+ * together.
+ *
+ * The mask is what stops the rest looking like a pasted-in rectangle. It fades
+ * hard on the vertical, where the strip's own edges would otherwise be a pair
+ * of seams across the page, and only gently on the horizontal, where the
+ * artwork runs full-bleed off both sides of the screen the way it is drawn to.
+ *
+ * `-webkit-mask-image` alongside the standard property for Safari, which only
+ * took the unprefixed one in 15.4 and is still worth carrying on a phone-only
+ * decoration.
+ */
+.hero-divider-art {
+  background-image: url('/hero-divider.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: contrast(1.62) brightness(1.5);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+  -webkit-mask-image: radial-gradient(130% 70% at 50% 50%, #000 10%, transparent 80%);
+  mask-image: radial-gradient(130% 70% at 50% 50%, #000 10%, transparent 80%);
+}
+
+/**
+ * The same drawing against a light page.
+ *
+ * Inverting first puts the flat background at 212 and the artwork below it, so
+ * the pairing flips with it: `contrast` lands 212 on white instead of black,
+ * and `multiply` is the mode that composites white as no change. The filaments
+ * come out dark on white, reading the same way round as they do on the dark
+ * page rather than as a photographic negative of it.
+ */
+:root[data-theme='light'] .hero-divider-art {
+  filter: invert(1) contrast(1.62);
+  mix-blend-mode: multiply;
+  opacity: 0.6;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .hero-divider-art {
+    filter: invert(1) contrast(1.62);
+    mix-blend-mode: multiply;
+    opacity: 0.6;
+  }
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--secondary-foreground) transparent;
+  position: relative;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary-foreground);
+}
+
+.sidebar-container {
+  background: var(--secondary);
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-scroll {
+  flex: 1 1 0%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--secondary-foreground);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.sidebar-link:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.sidebar-link[data-active='true'] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.sidebar-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 100%;
+  border-radius: 8px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  margin: 8px 0;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.sidebar-new:hover {
+  background: var(--primary-foreground);
+  color: var(--primary);
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-track-transparent {
+    scrollbar-color: transparent transparent;
+  }
+
+  .scrollbar-thumb-border {
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thumb-muted-foreground {
+    scrollbar-color: hsl(var(--muted-foreground)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-track-transparent::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thumb-border::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+  }
+
+  .scrollbar-thumb-muted-foreground::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground));
+    border-radius: 3px;
+  }
+
+  .hover\:scrollbar-thumb-muted-foreground:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground));
+  }
+}
+
+.item-count-badge {
+  background: var(--item-count-bg);
+  color: var(--item-count-text);
+  border: 1px solid var(--item-count-border);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+@media (max-width: 640px) {
+  .item-count-badge {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.5rem;
+    max-width: 150px;
+  }
+}
+
+.show-more-btn {
+  background: var(--show-more-btn-bg);
+  color: var(--show-more-btn-text);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.show-more-btn:hover:not(:disabled) {
+  background: var(--show-more-btn-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.15);
+}
+
+.show-more-btn:disabled {
+  background: var(--show-more-btn-disabled);
+  color: var(--show-more-btn-text-disabled);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.modern-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  height: 4px;
+  border-radius: 2px;
+  border: none;
+}
+
+.modern-slider::-webkit-slider-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--progress-track);
+  border: none;
+}
+
+.modern-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: var(--progress-thumb);
+  border: 2px solid var(--background);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: -5px;
+}
+
+.modern-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: var(--player-glow);
+}
+
+.modern-slider::-webkit-slider-thumb:active {
+  transform: scale(1.05);
+}
+
+.modern-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  border: none;
+  background: var(--progress-track);
+}
+
+.modern-slider::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: var(--progress-thumb);
+  border: 2px solid var(--background);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: var(--player-glow);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .glass-card {
+  background: rgba(17, 17, 17, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.animated-bg {
+  background: linear-gradient(
+    -45deg,
+    var(--background),
+    var(--secondary),
+    var(--muted),
+    var(--background)
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  80%,
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+.float-animation {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.glow-effect {
+  box-shadow: var(--player-glow);
+  transition: box-shadow 0.3s ease;
+}
+
+.glow-effect:hover {
+  box-shadow: var(--player-glow);
+}
+
+.audio-waves {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% + 40px);
+  height: calc(100% + 40px);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.audio-waves.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wave-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--wave-color);
+  border-radius: 50%;
+  animation: wave-pulse 2s ease-out infinite;
+}
+
+.wave-ring:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.wave-ring:nth-child(2) {
+  animation-delay: 0.4s;
+}
+
+.wave-ring:nth-child(3) {
+  animation-delay: 0.8s;
+}
+
+.wave-ring:nth-child(4) {
+  animation-delay: 1.2s;
+}
+
+.wave-ring:nth-child(5) {
+  animation-delay: 1.6s;
+}
+
+@keyframes wave-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+    border-width: 2px;
+  }
+  50% {
+    opacity: 0.4;
+    border-width: 1px;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+@media (max-width: 640px) {
+  .glass-card {
+    margin: 0.25rem;
+    border-radius: 1rem;
+    padding: 0.75rem !important;
+  }
+
+  .audio-waves {
+    width: calc(100% + 60px);
+    height: calc(100% + 60px);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .audio-waves .wave-ring {
+    border-width: 2px;
+  }
+
+  @keyframes wave-pulse {
+    0% {
+      transform: scale(1);
+      opacity: 0.8;
+      border-width: 2px;
+    }
+    50% {
+      opacity: 0.5;
+      border-width: 1.5px;
+    }
+    100% {
+      transform: scale(2);
+      opacity: 0;
+      border-width: 1px;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-slider::-webkit-slider-thumb {
+    height: 12px;
+    width: 12px;
+    margin-top: -4px;
+  }
+
+  .modern-slider::-moz-range-thumb {
+    height: 12px;
+    width: 12px;
+  }
+
+  .glass-card {
+    padding: 0.5rem !important;
+    margin: 0.125rem;
+  }
+
+  .audio-waves {
+    width: calc(100% + 80px);
+    height: calc(100% + 80px);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .audio-waves .wave-ring {
+    border-width: 2.5px;
+  }
+
+  @keyframes wave-pulse {
+    0% {
+      transform: scale(1);
+      opacity: 0.9;
+      border-width: 2.5px;
+    }
+    50% {
+      opacity: 0.6;
+      border-width: 2px;
+    }
+    100% {
+      transform: scale(2.2);
+      opacity: 0;
+      border-width: 1px;
+    }
+  }
+}
+
+/* Custom Aria Label Styles */
+.custom-aria-label {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: var(--aria-label-bg);
+  color: var(--aria-label-text);
+  border: 1px solid var(--aria-label-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  max-width: 250px;
+  word-wrap: break-word;
+  box-shadow: var(--aria-label-shadow);
+  backdrop-filter: var(--aria-label-backdrop);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-aria-label.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.custom-aria-label.multiline {
+  white-space: normal;
+  max-width: 200px;
+}
+
+/*
+ * A tooltip that lists things, one per line.
+ *
+ * `multiline` alone is not enough: it gives white-space: normal, which wraps
+ * but folds newlines into spaces, so a list of filenames arrives as one
+ * run-on paragraph.
+ */
+.custom-aria-label.aria-label-list {
+  white-space: pre-line;
+  text-align: left;
+  max-width: 320px;
+}
+
+/* No triangle - clean tooltip design */
+
+@media (max-width: 640px) {
+  .custom-aria-label {
+    font-size: 11px;
+    padding: 4px 8px;
+    max-width: 180px;
+    border-radius: 6px;
+  }
+
+  .custom-aria-label.multiline {
+    max-width: 150px;
+  }
+
+  .custom-aria-label.aria-label-list {
+    max-width: 220px;
+  }
+}
+
+/* Blog Typography Customization */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-quotes: var(--muted-foreground);
+}
+
+.prose p {
+  margin-bottom: 1.75rem;
+  line-height: 1.8;
+  font-size: 1.125rem;
+}
+
+.prose h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  margin-top: 3rem;
+  margin-bottom: 1.5rem;
+}
+
+.prose h2 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 3rem;
+  margin-bottom: 1.5rem;
+}
+
+.prose h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 2.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.prose h4 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+.prose ul,
+.prose ol {
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.prose li {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.8;
+  font-size: 1.125rem;
+}
+
+.prose a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.prose a:hover {
+  text-decoration: underline;
+}
+
+.prose code {
+  background-color: var(--muted);
+  color: var(--foreground);
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.prose code::before,
+.prose code::after {
+  content: '';
+}
+
+.prose pre {
+  background-color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+.prose pre code {
+  background-color: transparent;
+  color: var(--foreground);
+  padding: 0;
+  font-weight: 400;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Light mode specific code styles */
+:root .prose code {
+  background-color: hsl(240 4.8% 95.9%);
+  color: hsl(222.2 84% 4.9%);
+}
+
+:root .prose pre {
+  background-color: hsl(240 4.8% 95.9%);
+  border-color: hsl(240 5.9% 90%);
+}
+
+:root .prose pre code {
+  color: hsl(222.2 84% 4.9%);
+}
+
+/* Dark mode specific code styles */
+[data-theme='dark'] .prose code {
+  background-color: hsl(240 3.7% 15.9%);
+  color: hsl(210 40% 98%);
+}
+
+[data-theme='dark'] .prose pre {
+  background-color: hsl(240 3.7% 15.9%);
+  border-color: hsl(240 3.7% 25%);
+}
+
+[data-theme='dark'] .prose pre code {
+  color: hsl(210 40% 98%);
+}
+
+.prose blockquote {
+  border-left: 4px solid var(--primary);
+  padding-left: 1.5rem;
+  font-style: italic;
+  color: var(--muted-foreground);
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.prose img {
+  border-radius: 0.5rem;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  width: 100%;
+}
+
+.prose hr {
+  border-color: var(--border);
+  margin-top: 2.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.prose table {
+  width: 100%;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.prose th {
+  border: 1px solid var(--border);
+  background-color: var(--muted);
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.prose td {
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+}
+
+/**
+ * Motion is a preference, and the OS already knows the answer.
+ *
+ * Enabling the animation utilities turned motion on across every menu, dialog
+ * and popover at once. For anyone who gets migraines or motion sickness from
+ * it, that is a regression rather than a polish pass, so honour the setting
+ * they have already expressed. Near-zero rather than `none`: animation and
+ * transition end events still fire, and Radix waits on those to unmount an
+ * exiting element - killing them outright leaves closed menus in the DOM.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/**
+ * Menus unfold downward instead of appearing whole.
+ *
+ * The shadcn default is `zoom-in-95`: the entire surface, text and all, scales
+ * up together, so the menu arrives fully formed and simply grows a little. It
+ * reads as a pop, not as an opening.
+ *
+ * This scales the surface on the Y axis only, from the edge Radix anchored it
+ * to - so a menu placed below its trigger unfolds top to bottom, and one that
+ * flipped above unfolds bottom to top, with no per-side rules needed.
+ *
+ * The content fades in on its own slightly behind the surface. Without that
+ * the text is visibly squashed while the box is still expanding; letting the
+ * surface lead means the eye reads a panel opening rather than letters
+ * stretching. `backwards` holds the content hidden through that lead-in rather
+ * than flashing it for the first frame.
+ */
+@keyframes menu-unfold-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes menu-unfold-out {
+  from {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  to {
+    opacity: 0;
+    transform: scaleY(0.95);
+  }
+}
+
+@keyframes menu-content-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.menu-unfold[data-state='open'] {
+  /* Decelerating: quick to commit, settling at the end, so it lands rather
+     than stopping dead. */
+  animation: menu-unfold-in 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.menu-unfold[data-state='closed'] {
+  /* Closing is shorter. A dismissal the user has already decided on should
+     get out of the way, not perform. */
+  animation: menu-unfold-out 120ms ease-in;
+}
+
+.menu-unfold[data-state='open'] > * {
+  animation: menu-content-in 150ms ease-out 70ms backwards;
+}
+
+/**
+ * The multi-select bar arriving.
+ *
+ * It is mounted, not toggled - the component returns null with nothing
+ * selected - so the `transition-all` it carried could never fire: a transition
+ * needs a previous value on an element already in the document, and on mount
+ * there is none. The bar simply appeared, fully drawn, part-way through the
+ * menu's own opening.
+ *
+ * Same curve and duration as the menu it usually appears alongside, so the two
+ * read as one response to one click rather than two things happening near each
+ * other.
+ */
+@keyframes select-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.select-bar-in {
+  animation: select-bar-in 200ms cubic-bezier(0.2, 0, 0, 1);
+}

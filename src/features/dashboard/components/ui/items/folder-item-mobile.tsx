@@ -1,0 +1,243 @@
+import { useState } from 'react';
+import { FolderIcon } from '@/shared/components/icons/folder-icons';
+import { HiOutlineDotsVertical, HiOutlineCheck } from 'react-icons/hi';
+import { FaRegCircle } from 'react-icons/fa';
+import { FolderOverflowMenu } from '../menus/folder-overflow-menu';
+import { Folder } from '@/features/dashboard/types/folder';
+import type { FileItem } from '@/features/dashboard/types/file';
+import { formatTimeWithTooltip } from '@/shared/utils/time-utils';
+import { useMultiSelectStore } from '../../../stores/use-multi-select-store';
+import { getItemKeyIntent, opensMenuOnKey } from './item-keyboard';
+
+interface FolderItemMobileProps {
+  folder: Folder;
+  /**
+   * The rows a shift-select can span, which in the drive's list view means the
+   * files below these folders as well. Same widening the desktop row took.
+   */
+  allFolders?: (FileItem | Folder)[];
+  onFolderClick?: (folder: Folder) => void;
+  _onAction?: (action: string, folder: Folder) => void;
+  index?: number;
+}
+
+export function FolderItemMobile({
+  folder,
+  allFolders = [],
+  onFolderClick,
+  _onAction,
+  index = 0,
+}: FolderItemMobileProps) {
+  const { selectItem, isSelected, getSelectionCount } = useMultiSelectStore();
+
+  const selected = isSelected(folder);
+  const hasSelection = getSelectionCount() > 0;
+
+  // Long press detection
+  const [pressTimer, setPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [isLongPress, setIsLongPress] = useState(false);
+  const [touchStartPos, setTouchStartPos] = useState<{ x: number; y: number } | null>(null);
+
+  /**
+   * Selecting runs on pointer down rather than click, because that is when the
+   * menu itself opens: Radix's trigger calls onOpenToggle from onPointerDown.
+   * Selecting on click left the multi-select bar trailing the menu by the whole
+   * length of the press - the menu was already unfolding while the row was
+   * still unselected.
+   *
+   * Not on touch. There a tap opens an item and selection sits behind a long
+   * press, and once anything is selected a tap selects instead of opening - so
+   * selecting here would quietly change what every later tap does.
+   */
+  const handleMenuPointerDown = (event: React.PointerEvent) => {
+    // The same guard Radix puts on its own trigger. A secondary click, or a
+    // macOS ctrl-click, does not open the menu, so it must not select either.
+    if (event.button !== 0 || event.ctrlKey) return;
+
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (!isTouchDevice) {
+      selectItem(folder, index, false, false, allFolders);
+    }
+  };
+
+  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!opensMenuOnKey(event)) return;
+
+    selectItem(folder, index, false, false, allFolders);
+  };
+
+  const handleMenuClick = (event: React.MouseEvent) => {
+    // Still load-bearing after the selection moved off it: the row opens the
+    // item on click, so the click that opened the menu must not reach it.
+    event.stopPropagation();
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    setTouchStartPos({ x: touch.clientX, y: touch.clientY });
+    setIsLongPress(false);
+
+    const timer = setTimeout(() => {
+      setIsLongPress(true);
+      // Trigger selection on long press
+      selectItem(folder, index, true, false, allFolders);
+      // Haptic feedback if available (wrapped in try-catch to avoid console errors)
+      try {
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
+        }
+      } catch (e) {
+        // Silently ignore vibration errors
+        console.error('Vibration error:', e);
+      }
+    }, 500); // 500ms for long press
+    setPressTimer(timer);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // Cancel long press if finger moves too much
+    if (touchStartPos && pressTimer) {
+      const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - touchStartPos.x);
+      const deltaY = Math.abs(touch.clientY - touchStartPos.y);
+
+      // If moved more than 10px, cancel long press
+      if (deltaX > 10 || deltaY > 10) {
+        clearTimeout(pressTimer);
+        setPressTimer(null);
+        setIsLongPress(false);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      setPressTimer(null);
+    }
+    setTouchStartPos(null);
+  };
+
+  const handleItemClick = () => {
+    // Get fresh selection count at click time, not from render-time closure
+    const currentSelectionCount = getSelectionCount();
+    const hasCurrentSelection = currentSelectionCount > 0;
+
+    // If there's already a selection, add to it (toggle like Ctrl+Click)
+    if (hasCurrentSelection) {
+      selectItem(folder, index, true, false, allFolders);
+      setIsLongPress(false);
+      return;
+    }
+
+    // If this was a long press, don't open folder
+    if (isLongPress) {
+      setIsLongPress(false);
+      return;
+    }
+
+    // Normal tap - open the folder
+    handleFolderOpen();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const intent = getItemKeyIntent(event);
+    if (!intent) return;
+
+    // Space would scroll the page otherwise
+    event.preventDefault();
+
+    if (intent === 'select') {
+      selectItem(folder, index, event.ctrlKey || event.metaKey, event.shiftKey, allFolders);
+      return;
+    }
+
+    handleItemClick();
+  };
+
+  const handleFolderOpen = () => {
+    onFolderClick?.(folder);
+  };
+
+  const timeInfo = formatTimeWithTooltip(folder.lastModified);
+
+  return (
+    <div
+      data-folder-item
+      role="button"
+      tabIndex={0}
+      aria-label={`${folder.name}, folder${selected ? ', selected' : ''}`}
+      className={`flex items-center p-4 transition-colors cursor-pointer select-none touch-manipulation focus-visible:ring-2 focus-visible:ring-primary ${
+        selected
+          ? 'bg-primary/10 hover:bg-primary/15 active:bg-primary/20'
+          : 'hover:bg-secondary/50 active:bg-secondary/70'
+      }`}
+      style={{
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+      }}
+      onClick={handleItemClick}
+      onKeyDown={handleKeyDown}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+    >
+      {/* Selection Indicator - Show circle when selection mode is active */}
+      {hasSelection && (
+        <div className="flex-shrink-0 mr-2">
+          {selected ? (
+            <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+              <HiOutlineCheck className="w-3 h-3 text-primary-foreground" />
+            </div>
+          ) : (
+            <FaRegCircle className="w-5 h-5 text-muted-foreground" />
+          )}
+        </div>
+      )}
+
+      {/* Folder Icon */}
+      <div className="flex-shrink-0 mr-3">
+        <FolderIcon className="h-6 w-6 text-primary" />
+      </div>
+
+      {/* Folder Info */}
+      <div className="flex-1 min-w-0">
+        <h3 className="text-sm font-medium text-foreground truncate mb-1">{folder.name}</h3>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {/* Omitted rather than dashed: these fields sit inline, so there is
+              no column for a dash to keep straight. "No date" also said the
+              wrong thing - it reads as a date that went missing, when a folder
+              never had one to lose. */}
+          {timeInfo?.display && <span title={timeInfo.tooltip}>{timeInfo.display}</span>}
+          {folder.itemCount !== undefined && (
+            <>
+              {/* Separates two things, so it only earns its place when there
+                  are two. A folder with no date would otherwise open the line
+                  with a bullet separating nothing from the count. */}
+              {timeInfo?.display && <span>•</span>}
+              <span>{folder.itemCount} items</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Menu Button */}
+      <FolderOverflowMenu
+        folder={folder}
+        trigger={
+          <button
+            className="flex-shrink-0 p-2 cursor-pointer rounded-full hover:bg-secondary/80 transition-colors ml-2"
+            onPointerDown={handleMenuPointerDown}
+            onKeyDown={handleMenuKeyDown}
+            onClick={handleMenuClick}
+            aria-label={`More actions for ${folder.name}`}
+          >
+            <HiOutlineDotsVertical size={20} className="text-muted-foreground" />
+          </button>
+        }
+      />
+    </div>
+  );
+}

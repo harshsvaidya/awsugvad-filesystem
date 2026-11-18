@@ -1,0 +1,123 @@
+import { BYOS3ApiProvider } from '@opndrive/s3-api';
+import { generateS3Key } from './generate-s3-key';
+import { folderExists, describeFolderCheckError } from '@/services/folder-existence';
+import { objectExists } from '@/services/object-existence';
+
+/**
+ * Generates a unique filename by checking S3 and adding (1), (2), etc. if needed
+ *
+ * @throws when a name could not be checked. See `checkFileExists` below.
+ */
+export async function generateUniqueFileName(
+  apiS3: BYOS3ApiProvider,
+  originalName: string,
+  currentPath: string
+): Promise<string> {
+  const generateS3Key = (fileName: string, path: string): string => {
+    let cleanPath = path;
+    if (cleanPath.startsWith('/')) {
+      cleanPath = cleanPath.slice(1);
+    }
+    if (!cleanPath || cleanPath === '' || cleanPath === '/') {
+      return fileName;
+    }
+    if (!cleanPath.endsWith('/')) {
+      cleanPath = `${cleanPath}/`;
+    }
+    return `${cleanPath}${fileName}`;
+  };
+
+  // Deliberately not caught. This picks the name an upload is written to, so
+  // reading a failed check as "free" hands back a name that may well be in use
+  // - and "keep both" then overwrites the very file it was asked to keep. A
+  // caller that cannot get a name must not upload, which is what the throw
+  // tells it.
+  const checkFileExists = (fileName: string): Promise<boolean> =>
+    objectExists(apiS3, generateS3Key(fileName, currentPath));
+
+  // Check if original name is available
+  const originalExists = await checkFileExists(originalName);
+  if (!originalExists) {
+    return originalName;
+  }
+
+  // Extract name and extension
+  const lastDotIndex = originalName.lastIndexOf('.');
+  let baseName: string;
+  let extension: string;
+
+  if (lastDotIndex > 0 && lastDotIndex < originalName.length - 1) {
+    baseName = originalName.substring(0, lastDotIndex);
+    extension = originalName.substring(lastDotIndex);
+  } else {
+    baseName = originalName;
+    extension = '';
+  }
+
+  // Try numbered versions
+  let counter = 1;
+  let uniqueName: string;
+
+  do {
+    uniqueName = `${baseName} (${counter})${extension}`;
+    const exists = await checkFileExists(uniqueName);
+    if (!exists) {
+      return uniqueName;
+    }
+    counter++;
+  } while (counter <= 100); // Reasonable safety limit
+
+  // Fallback with timestamp if we somehow exhaust numbered options
+  const timestamp = Date.now();
+  return `${baseName} (${timestamp})${extension}`;
+}
+
+/**
+ * Generates a unique folder name by checking S3 and adding (1), (2), etc. if needed
+ */
+export async function generateUniqueFolderName(
+  apiS3: BYOS3ApiProvider,
+  originalName: string,
+  currentPath: string
+): Promise<string> {
+  const checkFolderExists = async (folderName: string): Promise<boolean> => {
+    // Use the same generateS3Key logic as the hook for consistency
+    const folderPrefix = generateS3Key(`${folderName}/`, currentPath);
+    try {
+      return await folderExists(apiS3, folderPrefix);
+    } catch {
+      // This function picks the name an upload will be written to. Treating a
+      // failed check as "free" is how it would hand back a name that is
+      // already in use and overwrite it.
+      throw new Error(describeFolderCheckError('the upload'));
+    }
+  };
+
+  // Check if original name is available
+  const originalExists = await checkFolderExists(originalName);
+  if (!originalExists) {
+    return originalName;
+  }
+
+  // Try numbered versions
+  let counter = 1;
+  let uniqueName: string;
+
+  do {
+    uniqueName = `${originalName} (${counter})`;
+    const exists = await checkFolderExists(uniqueName);
+    if (!exists) {
+      return uniqueName;
+    }
+    counter++;
+
+    // Add safety check to prevent infinite loops
+    if (counter > 100) {
+      break;
+    }
+  } while (counter <= 100); // Reasonable safety limit
+
+  // Fallback with timestamp if we somehow exhaust numbered options
+  const timestamp = Date.now();
+  return `${originalName} (${timestamp})`;
+}

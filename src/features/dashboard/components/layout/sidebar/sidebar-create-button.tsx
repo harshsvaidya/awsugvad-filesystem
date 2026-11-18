@@ -1,0 +1,117 @@
+import React, { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { cn } from '@/shared/utils/utils';
+import { CreateMenu } from '../../ui/menus/create-menu';
+import { CreateFolderDialog } from '../../ui/dialogs/create-folder-dialog';
+import { DuplicateDialog } from '@/features/upload/components/duplicate-dialog';
+import { useDriveStore } from '@/context/data-context';
+import { useFolderCreation } from '@/features/dashboard/hooks/use-folder-creation';
+import { useNotification } from '@/context/notification-context';
+
+interface SidebarCreateButtonProps {
+  onClick?: () => void;
+  className?: string;
+}
+
+export const SidebarCreateButton: React.FC<SidebarCreateButtonProps> = ({ onClick, className }) => {
+  const [showCreateFolderDialog, setShowCreateFolderDialog] = useState(false);
+  const currentPrefix = useDriveStore((state) => state.currentPrefix);
+  const { success, error } = useNotification();
+
+  // Folder creation logic
+  const { handleFolderCreation, duplicateDialog, hideDuplicateDialog } = useFolderCreation({
+    currentPath: currentPrefix || '',
+    onFolderCreated: (folderName) => {
+      success(`Folder "${folderName}" created successfully`);
+      setShowCreateFolderDialog(false);
+    },
+  });
+
+  // The menu opens itself now; this only forwards the caller's callback.
+  const handleClick = () => {
+    onClick?.();
+  };
+
+  const handleNewFolderClick = () => {
+    setShowCreateFolderDialog(true);
+  };
+
+  const handleCreateFolder = async (folderName: string) => {
+    try {
+      await handleFolderCreation(folderName);
+    } catch (err) {
+      // Extract meaningful error message
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+
+      // Show user-friendly error message based on the actual error
+      if (errorMessage.includes('Key starts with /')) {
+        error('Invalid folder path. Please try a different name.');
+      } else if (errorMessage.includes('already exists')) {
+        error('A folder with this name already exists.');
+      } else if (errorMessage.includes('permission') || errorMessage.includes('forbidden')) {
+        error('You do not have permission to create folders here.');
+      } else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+        error('Network error. Please check your connection and try again.');
+      } else if (errorMessage.includes('Create folder failed')) {
+        error('Failed to create folder. Please try a different name or check your permissions.');
+      } else {
+        error(`Failed to create folder: ${errorMessage}`);
+      }
+    }
+  };
+
+  const handleCloseFolderDialog = () => {
+    setShowCreateFolderDialog(false);
+  };
+
+  return (
+    <>
+      <CreateMenu
+        onNewFolderClick={handleNewFolderClick}
+        currentPath={currentPrefix || ''}
+        trigger={
+          <button
+            type="button"
+            onClick={handleClick}
+            className={cn(
+              'flex items-center w-full cursor-pointer px-6 py-4 mb-4 text-base font-medium',
+              'bg-card text-card-foreground border border-border',
+              'rounded-2xl shadow-sm hover:shadow-md transition-[color,background-color,box-shadow] duration-200',
+              'hover:bg-accent hover:text-foreground',
+              className
+            )}
+            aria-label="Create new file or folder"
+          >
+            <Plus aria-hidden="true" className="w-6 h-6 mr-3 flex-shrink-0" />
+            <span>New</span>
+          </button>
+        }
+      />
+
+      {/* Folder creation dialog - managed at this level */}
+      <CreateFolderDialog
+        isOpen={showCreateFolderDialog}
+        onClose={handleCloseFolderDialog}
+        onConfirm={handleCreateFolder}
+      />
+
+      {/* Duplicate folder dialog - rendered at same level as CreateFolderDialog with higher z-index */}
+      {duplicateDialog.isOpen && (
+        <DuplicateDialog
+          isOpen={duplicateDialog.isOpen}
+          duplicateItem={{
+            name: duplicateDialog.folderName,
+            type: 'folder',
+          }}
+          // One folder, so there is never a rest of the drop to apply an answer
+          // to and the bulk controls stay hidden. Both handlers close the dialog
+          // themselves once the folder is created.
+          onResolve={(choice) =>
+            choice === 'replace' ? duplicateDialog.onReplace?.() : duplicateDialog.onKeepBoth?.()
+          }
+          onCancel={hideDuplicateDialog}
+        />
+      )}
+    </>
+  );
+};

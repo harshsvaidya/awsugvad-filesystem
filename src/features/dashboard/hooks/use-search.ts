@@ -1,0 +1,325 @@
+import { useCallback, useRef, useEffect, useMemo } from 'react';
+import { createSearchService } from '@/features/dashboard/services/search-service';
+import { useNotification } from '@/context/notification-context';
+import { useDriveStore } from '@/context/data-context';
+import { useAuthGuard } from '@/hooks/use-auth-guard';
+import { useSearchStore } from '@/features/dashboard/stores/use-search-store';
+
+export const useSearch = () => {
+  const { error } = useNotification();
+  const currentPrefix = useDriveStore((state) => state.currentPrefix);
+  const { apiS3 } = useAuthGuard();
+
+  // AbortController for cancelling searches
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Use Zustand store instead of local state
+  const {
+    setSearchResults: setCachedSearchResults,
+    getCachedOrNull,
+    setLoading,
+    setCurrentQuery,
+    invalidateQuery,
+    setRequestCount,
+  } = useSearchStore();
+
+  // Subscribe to store state changes using Zustand selectors
+  // These will trigger re-renders when the store updates
+  const isLoading = useSearchStore((state) => state.isLoading);
+  const currentQuery = useSearchStore((state) => state.currentQuery);
+  const currentCachedPrefix = useSearchStore((state) => state.currentPrefix);
+
+  // Use a selector to compute searchResults reactively
+  // This will cause components to re-render when cache updates
+  const searchResults = useSearchStore((state) => {
+    if (!state.currentQuery || state.currentPrefix === null) return null;
+
+    // Read directly from the cache to trigger re-renders on updates
+    const cacheKey = `${state.currentQuery.trim().toLowerCase()}::${state.currentPrefix === '/' ? '' : state.currentPrefix}`;
+    const entry = state.searchCache.get(cacheKey);
+
+    if (!entry) return null;
+
+    return entry.results;
+  });
+
+  // Get request count for current query
+  const requestCount = useSearchStore((state) => {
+    if (!state.currentQuery || state.currentPrefix === null) return 0;
+
+    const cacheKey = `${state.currentQuery.trim().toLowerCase()}::${state.currentPrefix === '/' ? '' : state.currentPrefix}`;
+    const entry = state.searchCache.get(cacheKey);
+
+    return entry?.requestCount || 0;
+  });
+
+  // Ref to access latest search results without causing re-renders in callbacks
+  const searchResultsRef = useRef(searchResults);
+
+  // Update ref when searchResults change
+  useEffect(() => {
+    searchResultsRef.current = searchResults;
+  }, [searchResults]);
+
+  // Abort any in-flight search when the consumer unmounts. Without this the
+  // service keeps paginating (the scan ceiling is 100k objects) for a
+  // component that no longer exists, and the results still land in the
+  // module-level store afterwards - so on logout they repopulate a cache that
+  // clearSession has already cleared. These are billed S3 requests, which is
+  // why this is worth more than the usual "avoid setState after unmount".
+  useEffect(() => {
+    const ref = abortControllerRef;
+    return () => {
+      if (ref.current) {
+        ref.current.abort();
+        ref.current = null;
+        // The search's own `finally` only resets shared state when the
+        // controller it started with is still the current one. We just
+        // cleared it, so that branch will be skipped - and isLoading lives in
+        // a module-level store that outlives this component, so leaving it
+        // true would strand the next mount on a permanent spinner.
+        setLoading(false);
+      }
+    };
+  }, [setLoading]);
+
+  // apiS3 flips between null and a real provider as auth state resolves (see
+  // #82) - every hook below must run unconditionally on every render no
+  // matter which state we're in, so guard inside the callbacks instead of
+  // returning early here.
+  const searchService = useMemo(() => (apiS3 ? createSearchService(apiS3) : null), [apiS3]);
+
+  /**
+   * Cancel the current search operation
+   */
+  const cancelSearch = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setLoading(false);
+    }
+  }, [setLoading]);
+
+  /**
+   * Universal search function with automatic caching and pagination support
+   * @param query - Search query string
+   * @param nextToken - Optional token for fetching more results (API-level pagination)
+   * @param forceRefresh - Force bypass cache and fetch fresh results
+   */
+  const search = useCallback(
+    async (query: string, nextToken?: string, forceRefresh = false) => {
+      if (!searchService) {
+        return;
+      }
+
+      if (!query.trim()) {
+        setCurrentQuery(null, null);
+        return;
+      }
+
+      const normalizedPrefix = currentPrefix === '/' ? '' : currentPrefix || '';
+
+      // Check cache only for initial search (no nextToken) and no force refresh
+      if (!nextToken && !forceRefresh) {
+        const cachedResults = getCachedOrNull(query, normalizedPrefix);
+        if (cachedResults) {
+          // Cache hit - use cached results
+          setCurrentQuery(query, normalizedPrefix);
+          return;
+        }
+      }
+
+      // Cancel any existing search
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      // Held in a local as well as the ref so the cleanup below can tell
+      // whether THIS search is still the current one.
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const signal = controller.signal;
+
+      // Fetch from API
+      setLoading(true);
+      setCurrentQuery(query, normalizedPrefix);
+
+      // Capture the starting count BEFORE the search begins
+      const startingCount = useSearchStore.getState().getRequestCount(query, normalizedPrefix);
+
+      try {
+        const results = await searchService.search(query, normalizedPrefix, nextToken, {
+          signal,
+          onProgress: (progress) => {
+            if (progress.status === 'error') {
+              error('Search failed');
+            }
+          },
+          onError: (errorMessage) => {
+            error(errorMessage);
+          },
+          onRequestCountUpdate: (sessionCount) => {
+            // Session count is the number of API calls in THIS search session
+            // Add it to the starting count to get the cumulative total
+            const totalCount = startingCount + sessionCount;
+
+            setRequestCount(query, normalizedPrefix, totalCount);
+          },
+          onResultsUpdate: (partialResults) => {
+            // Stream results as they come in
+            if (nextToken && searchResultsRef.current) {
+              // Merge with existing results for pagination
+              const seenFiles = new Set<string>(
+                searchResultsRef.current.files.map((f) => (f.Key ? String(f.Key) : ''))
+              );
+              const dedupedNewFiles = partialResults.files.filter((f) => {
+                const k = f.Key ? String(f.Key) : '';
+                if (!k || seenFiles.has(k)) return false;
+                seenFiles.add(k);
+                return true;
+              });
+
+              const seenFolders = new Set<string>(
+                searchResultsRef.current.folders.map((f) => (f.Key ? String(f.Key) : ''))
+              );
+              const dedupedNewFolders = partialResults.folders.filter((f) => {
+                const k = f.Key ? String(f.Key) : '';
+                if (!k || seenFolders.has(k)) return false;
+                seenFolders.add(k);
+                return true;
+              });
+
+              const updatedResults = {
+                files: [...searchResultsRef.current.files, ...dedupedNewFiles],
+                totalFiles: searchResultsRef.current.totalFiles + dedupedNewFiles.length,
+                folders: [...searchResultsRef.current.folders, ...dedupedNewFolders],
+                totalFolders: searchResultsRef.current.totalFolders + dedupedNewFolders.length,
+                totalKeys:
+                  searchResultsRef.current.totalKeys +
+                  dedupedNewFiles.length +
+                  dedupedNewFolders.length,
+                nextToken: partialResults.nextToken,
+                isTruncated: partialResults.isTruncated,
+              };
+              setCachedSearchResults(query, normalizedPrefix, updatedResults);
+            } else {
+              // Initial search - replace results
+              setCachedSearchResults(query, normalizedPrefix, partialResults);
+            }
+          },
+        });
+
+        // Store/merge final results in cache
+        if (nextToken && searchResultsRef.current) {
+          // Append new results to existing ones with de-duplication
+          const seenFiles = new Set<string>(
+            searchResultsRef.current.files.map((f) => (f.Key ? String(f.Key) : ''))
+          );
+          const dedupedNewFiles = results.files.filter((f) => {
+            const k = f.Key ? String(f.Key) : '';
+            if (!k || seenFiles.has(k)) return false;
+            seenFiles.add(k);
+            return true;
+          });
+
+          const seenFolders = new Set<string>(
+            searchResultsRef.current.folders.map((f) => (f.Key ? String(f.Key) : ''))
+          );
+          const dedupedNewFolders = results.folders.filter((f) => {
+            const k = f.Key ? String(f.Key) : '';
+            if (!k || seenFolders.has(k)) return false;
+            seenFolders.add(k);
+            return true;
+          });
+
+          const updatedResults = {
+            files: [...searchResultsRef.current.files, ...dedupedNewFiles],
+            totalFiles: searchResultsRef.current.totalFiles + dedupedNewFiles.length,
+            folders: [...searchResultsRef.current.folders, ...dedupedNewFolders],
+            totalFolders: searchResultsRef.current.totalFolders + dedupedNewFolders.length,
+            totalKeys:
+              searchResultsRef.current.totalKeys +
+              dedupedNewFiles.length +
+              dedupedNewFolders.length,
+            nextToken: results.nextToken,
+            isTruncated: results.isTruncated,
+          };
+          setCachedSearchResults(query, normalizedPrefix, updatedResults);
+        } else {
+          // Initial search or force refresh
+          setCachedSearchResults(query, normalizedPrefix, results);
+        }
+      } catch (err) {
+        // Don't show error if search was cancelled
+        if (err instanceof Error && err.message === 'Search cancelled') {
+          return;
+        }
+
+        error(`Failed to search for "${query}": ${err}`);
+        if (!nextToken) {
+          // Only clear query on initial search failure, not pagination failure
+          setCurrentQuery(null, null);
+        }
+      } finally {
+        // Only tear down shared state if this search is still the current
+        // one. Starting a second search aborts the first, and the first's
+        // rejection lands here afterwards - unconditionally clearing the ref
+        // would discard the SECOND search's controller, leaving the Cancel
+        // button wired to nothing, and unconditionally clearing isLoading
+        // would hide the spinner while that search is still running.
+        if (abortControllerRef.current === controller) {
+          setLoading(false);
+          abortControllerRef.current = null;
+        }
+      }
+    },
+    [
+      currentPrefix,
+      error,
+      getCachedOrNull,
+      setCachedSearchResults,
+      setLoading,
+      setCurrentQuery,
+      setRequestCount,
+      searchService,
+    ]
+  );
+
+  /**
+   * Clear current query and results
+   */
+  const clearResults = useCallback(() => {
+    setCurrentQuery(null, null);
+  }, [setCurrentQuery]);
+
+  /**
+   * Invalidate current query cache and refetch
+   */
+  const invalidateCurrentQuery = useCallback(() => {
+    if (currentQuery && currentCachedPrefix !== null) {
+      invalidateQuery(currentQuery, currentCachedPrefix);
+      // Refetch with force refresh
+      search(currentQuery, undefined, true);
+    }
+  }, [currentQuery, currentCachedPrefix, invalidateQuery, search]);
+
+  return {
+    search,
+    clearResults,
+    invalidateCurrentQuery,
+    cancelSearch,
+    isLoading,
+    searchResults,
+    requestCount,
+    hasResults: searchResults !== null && searchResults.totalKeys > 0,
+    canLoadMore: searchResults?.nextToken !== undefined,
+    /**
+     * False while the S3 provider is unavailable, during which `search()` is
+     * inert. Callers MUST branch on this rather than treating an empty
+     * `searchResults` as "nothing matched" - the two are indistinguishable
+     * from the result alone, and rendering "No results found" when we never
+     * ran the query tells the user something untrue.
+     */
+    isReady: searchService !== null,
+  };
+};

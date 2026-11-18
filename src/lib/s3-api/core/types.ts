@@ -1,0 +1,298 @@
+import { MultipartUploader } from '../utils/multipartUploader';
+import { _Object, Bucket, CommonPrefix, S3Client } from '@aws-sdk/client-s3';
+
+export interface Credentials {
+  region: string; //AWS region
+  prefix: string; // Prefix (used when the user has access to only specific prefixes)
+  accessKeyId: string; // AWS Access key ID
+  secretAccessKey: string; // AWS Access Secret key
+  bucketName: string; //AWS S3 bucket name
+  endpoint?: string;
+}
+
+export interface DirectoryStructure {
+  files: _Object[];
+  folders: CommonPrefix[];
+  nextToken: string | undefined;
+  isTruncated: boolean | undefined;
+}
+
+export interface PresignedUploadParams {
+  key: string;
+  expiresInSeconds: number;
+}
+
+export type logTypes = 'warn' | 'log' | 'error' | 'table' | 'dir';
+export type userTypes = 'BYO';
+
+export interface MultipartUploadParams {
+  key: string;
+  fileName: string;
+  /**
+   * Size of each upload part, in BYTES. Values below the 5 MiB S3 minimum are
+   * clamped up to it.
+   *
+   * Named `partSizeMB` until 3.0.0, where it was already compared against a
+   * byte threshold - so passing `10` for "10 MB" failed the check and silently
+   * fell back to 5 MiB parts. Renamed rather than reinterpreted, because
+   * changing the unit would have quietly altered behaviour for callers already
+   * passing bytes.
+   */
+  partSizeBytes: number;
+  concurrency: number;
+}
+
+export interface MultipartUploadConfig extends MultipartUploadParams {
+  s3: S3Client;
+  bucket: string;
+  key: string;
+  fileName: string;
+  /** Size of each upload part, in BYTES. See MultipartUploadParams. */
+  partSizeBytes: number;
+  concurrency: number;
+}
+
+export interface SignedUrlParams {
+  key: string;
+  expiryInSeconds: number;
+  isPreview: boolean;
+  responseContentType?: string;
+  /**
+   * Name the browser should save the file as. Only honoured when `isPreview` is
+   * false; sets `Content-Disposition: attachment` on the presigned response so
+   * the name survives the cross-origin hop that makes `<a download>` a no-op.
+   */
+  downloadFilename?: string;
+}
+
+export interface DownloadFileParams {
+  key: string;
+  onProgress?: (progress: number, loaded: number, total: number) => void;
+}
+
+export interface MoveFileParams {
+  oldKey: string;
+  newKey: string;
+}
+
+export interface RenameFileParams {
+  basePath: string;
+  oldName: string;
+  newName: string;
+}
+
+export interface RenameFolderParams {
+  oldPrefix: string;
+  newPrefix: string;
+  onProgress?: (progress: RenameFolderProgress) => void;
+}
+
+export interface RenameFolderProgress {
+  phase: 'copying' | 'verifying' | 'deleting';
+  total: number;
+  processed: number;
+  currentKey?: string;
+  newKey?: string;
+}
+
+/** A single object that could not be copied or deleted while renaming a folder. */
+export interface RenameFolderError {
+  key: string;
+  code?: string;
+  message?: string;
+}
+
+/**
+ * - `completed`      - copied, verified, and old keys removed. Fully done.
+ * - `copied-not-cleaned` - every object is present and correct at the NEW
+ *   location, but some old objects could not be deleted. The user's data is
+ *   safe and complete; this is a cleanup problem, NOT a failed rename, and
+ *   must not be reported as one.
+ * - `failed`         - the copy did not fully succeed, so nothing was deleted.
+ *   The source prefix is intact and the same rename can safely be retried.
+ */
+export type RenameFolderStatus = 'completed' | 'copied-not-cleaned' | 'failed';
+
+export interface RenameFolderResult {
+  status: RenameFolderStatus;
+  totalKeys: number;
+  /**
+   * Objects successfully written to the new prefix.
+   *
+   * When `status` is 'failed' this doubles as the count of orphaned copies
+   * left at the destination - harmless (a retry overwrites them, since
+   * CopyObject is idempotent) but worth surfacing so the user knows they are
+   * there.
+   */
+  copiedKeys: number;
+  deletedKeys: number;
+  errors: RenameFolderError[];
+  /** Convenience for `status === 'completed'`. */
+  completed: boolean;
+}
+
+/**
+ * A single object that S3 refused to delete within a DeleteObjects call.
+ * DeleteObjects returns 200 even when individual keys fail, so these must be
+ * inspected by the caller - they are not thrown.
+ */
+export interface DeleteBatchError {
+  key: string;
+  /** Present when the bucket is versioned; the error is meaningless without it. */
+  versionId?: string;
+  code?: string;
+  message?: string;
+}
+
+export interface DeleteBatchResult {
+  /** How many keys were sent in the request. */
+  requested: number;
+  /**
+   * How many were removed. Derived as `requested - errors.length`: Quiet mode
+   * returns no success list, so this is an inference and assumes S3 emits at
+   * most one error entry per requested key. Callers passing duplicate keys will
+   * see it drift.
+   */
+  deleted: number;
+  /** Per-object failures. Empty on a fully successful batch. */
+  errors: DeleteBatchError[];
+}
+
+export interface SearchParams {
+  prefix: string;
+  searchTerm: string;
+  nextToken: string | undefined;
+}
+
+export interface ListBucketParams {
+  /**
+   * Filters to bucket names beginning with this value (server-side, via S3's
+   * ListBuckets Prefix param). S3 has no "contains" match for bucket names,
+   * only starts-with. Omit to list all buckets.
+   */
+  searchTerm?: string;
+  nextToken: string | undefined;
+}
+
+export interface SearchResult {
+  files: _Object[];
+  totalFiles: number;
+  folders: _Object[];
+  totalFolders: number;
+  totalKeys: number;
+  nextToken?: string;
+  isTruncated?: boolean;
+}
+
+export interface ListBucketResult {
+  buckets: Bucket[];
+  totalBuckets: number;
+  nextToken?: string;
+  isTruncated?: boolean;
+}
+
+export interface CreateBucketResult {
+  status: 'completed';
+  bucketName: string;
+  /** Convenience for `status === 'completed'`. */
+  completed: true;
+}
+
+/**
+ * - `completed`  - the bucket was empty and has been deleted.
+ * - `not-empty`  - S3 refused because the bucket still has objects, versions,
+ *   or delete markers. Nothing was touched - deleteBucket never empties a
+ *   bucket itself, callers must do that first (e.g. via deleteBatch).
+ */
+export type DeleteBucketStatus = 'completed' | 'not-empty';
+
+export interface DeleteBucketResult {
+  status: DeleteBucketStatus;
+  bucketName: string;
+  /** Convenience for `status === 'completed'`. */
+  completed: boolean;
+}
+
+/** A single tag on a bucket. */
+export interface BucketTag {
+  key: string;
+  value: string;
+}
+
+export interface GetBucketTagsResult {
+  tags: BucketTag[];
+}
+
+export interface SetBucketTagsParams {
+  bucketName: string;
+  /**
+   * Full replacement tag set - mirrors S3's PutBucketTagging semantics
+   * exactly, this REPLACES every tag currently on the bucket, it does not
+   * merge. Pass [] to remove every tag. Use addOrUpdateBucketTags /
+   * removeBucketTags for merge/subtract semantics.
+   */
+  tags: BucketTag[];
+}
+
+export interface AddOrUpdateBucketTagsParams {
+  bucketName: string;
+  /** Tags to merge in. Existing keys not listed here are preserved; keys listed here overwrite the existing value. */
+  tags: BucketTag[];
+}
+
+export interface RemoveBucketTagsParams {
+  bucketName: string;
+  /** Keys to remove. Keys not present in the current tag set are silently ignored. */
+  keys: string[];
+}
+
+// Uploader
+
+export type UploadStatus = 'queued' | 'uploading' | 'paused' | 'completed' | 'failed' | 'cancelled';
+
+export interface UploadItem {
+  id: string;
+  /**
+   * The file being uploaded, or undefined once the item has finished.
+   *
+   * The manager keeps every item it has ever been given so `getStatus` can
+   * still answer for finished work, but a `File` pins an OS-level handle and
+   * the uploader alongside it holds per-part state. Retaining both for the
+   * lifetime of the session meant a 10,000-file upload never gave anything
+   * back until logout, so they are dropped the moment an item reaches
+   * 'completed', 'failed', or 'cancelled'.
+   *
+   * Invariant: present for 'queued', 'uploading', and 'paused' (a paused item
+   * must keep them to resume); absent for terminal states.
+   */
+  file?: File;
+  status: UploadStatus;
+  progress: number;
+  /** The uploader driving this item. Released with `file`; see above. */
+  uploader?: MultipartUploader;
+  error?: string;
+  config: {
+    key: string;
+    folderId?: string;
+  };
+}
+
+export type UploadManagerConfig = {
+  s3: S3Client;
+  bucket: string;
+  prefix: string; // Base prefix for all uploads
+  maxConcurrency?: number;
+  /** Default part size for all uploads, in MEGABYTES. Converted to bytes before reaching MultipartUploader. */
+  partSizeMB?: number;
+};
+
+// For the event emitter
+export type UploadEvent = 'statusChange' | 'progress';
+export type EventPayload = {
+  id: string;
+  status: UploadStatus;
+  progress: number;
+  error?: string;
+};
+
+export type EventListener = (payload: EventPayload) => void;

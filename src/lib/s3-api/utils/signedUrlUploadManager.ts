@@ -1,0 +1,339 @@
+// SignedUrlUploadManager.ts - Queue manager for signed URL uploads
+import { v4 as uuidv4 } from 'uuid';
+import { SignedUrlUploader } from './signedUrlUploader';
+import { BYOS3ApiProvider } from '../index';
+import { UploadStatus, UploadEvent, EventListener, EventPayload } from '../core/types';
+
+interface SignedUrlUploadItem {
+  id: string;
+  /**
+   * Released once the item is terminal, so a finished upload stops pinning an
+   * OS file handle. See UploadManager.releaseResources for the full reasoning;
+   * the item itself is kept so getStatus() can still answer.
+   */
+  file?: File;
+  uploader?: SignedUrlUploader;
+  config: {
+    key: string;
+    folderId?: string;
+  };
+  status: UploadStatus;
+  progress: number;
+  error?: string;
+}
+
+export interface SignedUrlUploadManagerConfig {
+  apiProvider: BYOS3ApiProvider;
+  maxConcurrency?: number;
+  expiresInSeconds?: number;
+}
+
+export class SignedUrlUploadManager {
+  private static instance: SignedUrlUploadManager | undefined;
+  private apiProvider: BYOS3ApiProvider;
+  private uploads = new Map<string, SignedUrlUploadItem>();
+  private queue: string[] = [];
+  private activeUploads = 0;
+  private maxConcurrency: number;
+  private expiresInSeconds: number;
+  private listeners = new Map<UploadEvent, Set<EventListener>>();
+  // See UploadManager.isDisposed for why this exists.
+  private isDisposed = false;
+
+  private constructor(config: SignedUrlUploadManagerConfig) {
+    this.apiProvider = config.apiProvider;
+    this.maxConcurrency = config.maxConcurrency ?? 2;
+    this.expiresInSeconds = config.expiresInSeconds ?? 3600;
+  }
+
+  public static getInstance(config: SignedUrlUploadManagerConfig): SignedUrlUploadManager {
+    if (!SignedUrlUploadManager.instance) {
+      SignedUrlUploadManager.instance = new SignedUrlUploadManager(config);
+    }
+    return SignedUrlUploadManager.instance;
+  }
+
+  /** See UploadManager.disposeInstance - identical contract. */
+  public static async disposeInstance(): Promise<void> {
+    const existing = SignedUrlUploadManager.instance;
+    SignedUrlUploadManager.instance = undefined;
+    if (!existing) return;
+
+    existing.isDisposed = true;
+    try {
+      await existing.cancelAllUploads();
+    } catch (err) {
+      console.error('Failed to cleanly cancel in-flight signed-url uploads during dispose:', err);
+    }
+  }
+
+  /** See UploadManager.cancelAllUploads for why this uses allSettled. */
+  private async cancelAllUploads(): Promise<void> {
+    const ids = Array.from(this.uploads.entries())
+      .filter(([, item]) => ['queued', 'uploading'].includes(item.status))
+      .map(([id]) => id);
+
+    const results = await Promise.allSettled(ids.map((id) => this.cancelUpload(id)));
+
+    results.forEach((result, i) => {
+      if (result.status === 'rejected') {
+        console.error(
+          `Failed to cancel signed-url upload ${ids[i]} during dispose:`,
+          result.reason
+        );
+      }
+    });
+  }
+
+  // Event emitter methods
+  public on(event: UploadEvent, listener: EventListener): void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(listener);
+  }
+
+  public off(event: UploadEvent, listener: EventListener): void {
+    this.listeners.get(event)?.delete(listener);
+  }
+
+  /**
+   * Add a file to the upload queue
+   */
+  public addUpload(file: File, config: { key: string }): string {
+    if (this.isDisposed) {
+      throw new Error(
+        'This SignedUrlUploadManager instance has been disposed. Obtain a new one via getInstance().'
+      );
+    }
+
+    const id = uuidv4();
+    const uploader = new SignedUrlUploader({
+      apiProvider: this.apiProvider,
+      key: config.key,
+      fileName: file.name,
+      expiresInSeconds: this.expiresInSeconds,
+    });
+
+    const uploadItem: SignedUrlUploadItem = {
+      id,
+      file,
+      uploader,
+      config,
+      status: 'queued',
+      progress: 0,
+    };
+
+    this.uploads.set(id, uploadItem);
+    this.queue.push(id);
+    this.emitStatusChange(id, 'queued', 0);
+    this.processQueue();
+
+    return id;
+  }
+
+  /**
+   * Add a folder upload (batch of files)
+   */
+  public addFolderUpload(
+    files: FileList,
+    config: { basePrefix?: string }
+  ): { folderId: string; fileIds: string[] } {
+    const folderId = uuidv4();
+    const fileIds: string[] = [];
+
+    for (const file of Array.from(files)) {
+      if (file.size === 0 && file.type === '') continue;
+
+      let key = '';
+
+      if (!config.basePrefix) {
+        key = file.webkitRelativePath;
+      } else {
+        key = `${config.basePrefix}${file.webkitRelativePath}`;
+      }
+
+      const fileId = this.addUpload(file, { key });
+      fileIds.push(fileId);
+    }
+
+    return { folderId, fileIds };
+  }
+
+  /**
+   * Cancel an upload (signed URL uploads cannot be paused, only cancelled)
+   */
+  public async cancelUpload(id: string): Promise<void> {
+    const item = this.uploads.get(id);
+    if (!item) return;
+
+    // Already terminal - re-running the bookkeeping would emit a duplicate
+    // 'cancelled' event. (uploader.cancel() here is synchronous, so unlike
+    // UploadManager there is no await window for the worker to race us.)
+    if (['completed', 'failed', 'cancelled'].includes(item.status)) return;
+
+    const queueIndex = this.queue.indexOf(id);
+    if (queueIndex > -1) {
+      this.queue.splice(queueIndex, 1);
+    }
+
+    if (item.status === 'uploading') {
+      // Non-null: resources are released only on terminal states, and the
+      // terminal check above has already returned.
+      item.uploader!.cancel();
+      this.activeUploads--;
+    }
+
+    this.updateItemStatus(id, 'cancelled');
+    this.releaseResources(id);
+    this.processQueue();
+  }
+
+  /** See UploadManager.releaseResources - same leak, same reasoning. */
+  private releaseResources(id: string): void {
+    const item = this.uploads.get(id);
+    if (!item) return;
+
+    item.file = undefined;
+    item.uploader = undefined;
+  }
+
+  /**
+   * Pause is not supported for signed URL uploads
+   * Included for API compatibility - will cancel instead
+   */
+  public pauseUpload(id: string): void {
+    const item = this.uploads.get(id);
+    if (!item || item.status !== 'uploading') return;
+
+    // Signed URL uploads cannot be paused - cancel instead
+    this.cancelUpload(id);
+  }
+
+  /**
+   * Resume is not supported for signed URL uploads
+   * Included for API compatibility
+   */
+  public async resumeUpload(_id: string): Promise<void> {
+    // Signed URL uploads cannot be resumed
+    // This is a no-op for compatibility
+  }
+
+  /**
+   * Get status of an upload
+   */
+  public getStatus(id: string): { status: UploadStatus; progress: number } | undefined {
+    const item = this.uploads.get(id);
+    return item ? { status: item.status, progress: item.progress } : undefined;
+  }
+
+  /**
+   * Get all upload statuses
+   */
+  public getAllStatuses(): Record<string, { status: UploadStatus; progress: number }> {
+    const allStatuses: Record<string, { status: UploadStatus; progress: number }> = {};
+    for (const [id, item] of this.uploads.entries()) {
+      allStatuses[id] = { status: item.status, progress: item.progress };
+    }
+    return allStatuses;
+  }
+
+  /**
+   * Process the upload queue
+   */
+  private async processQueue(): Promise<void> {
+    // See UploadManager.processQueue - without this, cancelling a queued item
+    // during dispose would start the next queued item against the old session.
+    if (this.isDisposed) return;
+
+    if (this.activeUploads >= this.maxConcurrency || this.queue.length === 0) {
+      return;
+    }
+
+    const id = this.queue.shift()!;
+    const item = this.uploads.get(id);
+
+    if (!item || item.status !== 'queued') {
+      this.processQueue();
+      return;
+    }
+
+    this.activeUploads++;
+    this.updateItemStatus(id, 'uploading');
+
+    (async () => {
+      try {
+        const onProgress = (progress: number) => {
+          item.progress = progress;
+          this.emit('progress', { id, status: item.status, progress });
+        };
+
+        // Non-null: the item was just moved to 'uploading'.
+        await item.uploader!.upload(item.file!, onProgress);
+
+        if (this.uploads.get(id)?.status === 'uploading') {
+          this.updateItemStatus(id, 'completed', 100);
+        }
+      } catch (err) {
+        const currentStatus = this.uploads.get(id)?.status;
+        if (currentStatus !== 'cancelled') {
+          console.error(`Upload failed for ${id}:`, err);
+          this.updateItemStatus(
+            id,
+            'failed',
+            item.progress,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      } finally {
+        const finalStatus = this.uploads.get(id)?.status;
+        if (finalStatus === 'completed' || finalStatus === 'failed') {
+          // 'cancelled' is already released by cancelUpload().
+          this.releaseResources(id);
+          this.activeUploads--;
+          this.processQueue();
+        }
+      }
+    })();
+  }
+
+  /**
+   * Update item status and emit events
+   */
+  private updateItemStatus(
+    id: string,
+    status: UploadStatus,
+    progress?: number,
+    error?: string
+  ): void {
+    const item = this.uploads.get(id);
+    if (!item) return;
+
+    item.status = status;
+    if (progress !== undefined) item.progress = progress;
+    if (error !== undefined) item.error = error;
+
+    this.emitStatusChange(id, status, item.progress, error);
+  }
+
+  /**
+   * Emit events to listeners
+   */
+  /** See UploadManager.emit - listeners must be isolated from each other. */
+  private emit(event: UploadEvent, payload: EventPayload): void {
+    this.listeners.get(event)?.forEach((listener) => {
+      try {
+        listener(payload);
+      } catch (err) {
+        console.error(`Signed-url upload event listener for "${event}" threw:`, err);
+      }
+    });
+  }
+
+  /**
+   * Emit status change event
+   */
+  private emitStatusChange(id: string, status: UploadStatus, progress: number, error?: string) {
+    this.emit('statusChange', { id, status, progress, error });
+  }
+}
