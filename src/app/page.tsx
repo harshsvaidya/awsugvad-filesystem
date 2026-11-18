@@ -1,17 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
-  ShieldCheck,
-  Key,
-  Lock,
-  Globe,
   Database,
-  FolderOpen,
   ArrowRight,
-  ExternalLink,
   Copy,
   Check,
   AlertTriangle,
@@ -147,15 +141,6 @@ export default function HomePage() {
                 Open Drive
               </button>
             )}
-            <a
-              href="https://aws.amazon.com/s3/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-            >
-              AWS S3 Docs
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </div>
         </div>
       </header>
@@ -249,16 +234,11 @@ export default function HomePage() {
               </button>
             )}
 
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl">
-                <Database className="w-6 h-6" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-foreground">S3 Credentials</h2>
-                <p className="text-xs text-muted-foreground">
-                  Credentials are stored securely in your browser's LocalStorage.
-                </p>
-              </div>
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-foreground">S3 Credentials</h2>
+              <p className="text-xs text-muted-foreground">
+                Credentials are stored securely in your browser's LocalStorage.
+              </p>
             </div>
 
             {/* Error Banner */}
@@ -290,8 +270,7 @@ export default function HomePage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Access Key ID */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-muted-foreground" />
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   AWS Access Key ID <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -308,8 +287,7 @@ export default function HomePage() {
 
               {/* Secret Access Key */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   AWS Secret Access Key <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -338,8 +316,7 @@ export default function HomePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Region */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     AWS Region <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -357,8 +334,7 @@ export default function HomePage() {
 
                 {/* Bucket Name */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Database className="w-3.5 h-3.5 text-muted-foreground" />
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Bucket Name <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -375,10 +351,7 @@ export default function HomePage() {
               {/* Optional Folder Prefix */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
-                    Folder Prefix (Optional)
-                  </span>
+                  <span>Folder Prefix (Optional)</span>
                   <span className="text-[11px] font-normal lowercase text-muted-foreground">
                     root if empty
                   </span>
@@ -443,14 +416,6 @@ export default function HomePage() {
                 )}
               </button>
             </form>
-
-            {/* Security Guarantee */}
-            <div className="mt-6 pt-5 border-t border-border flex items-start gap-2.5 text-muted-foreground">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              <p className="text-xs leading-relaxed">
-                <strong className="text-foreground">Client-Side Architecture:</strong> All AWS requests originate directly from your browser to AWS S3. Your keys are stored only in your local browser and never sent to any intermediary server.
-              </p>
-            </div>
           </div>
         )}
 
@@ -510,21 +475,10 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="w-full border-t border-border bg-white/50 dark:bg-slate-900/50 py-6 text-center text-xs text-muted-foreground">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground">AWSUG Vadodara</span>
-            <span>•</span>
-            <span>Amazon S3 Cloud Filesystem Interface</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              AWS Documentation
-            </a>
-            <span>•</span>
-            <a href="https://github.com/awsugvad" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              Community GitHub
-            </a>
-          </div>
+        <div className="max-w-6xl mx-auto px-4 flex items-center justify-center gap-2">
+          <span className="font-semibold text-foreground">AWSUG Vadodara</span>
+          <span>•</span>
+          <span>Amazon S3 Cloud Filesystem Interface</span>
         </div>
       </footer>
     </div>
