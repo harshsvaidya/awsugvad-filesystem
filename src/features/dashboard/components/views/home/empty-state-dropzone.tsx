@@ -66,7 +66,7 @@ export function EmptyStateDropzone({ onFilesDropped, className = '' }: EmptyStat
           <div className="w-80 p-4">
             <div
               role="img"
-              aria-label="Welcome to Opndrive"
+              aria-label="AWS UG Vadodara"
               className="w-full aspect-[1024/853] bg-contain bg-center bg-no-repeat"
               style={{
                 backgroundImage: 'url(/home.png)',

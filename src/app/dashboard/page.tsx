@@ -189,7 +189,7 @@ export default function HomePage() {
                 : 'opacity-0 -translate-y-2 pointer-events-none'
             }`}
           >
-            <h2 className="text-2xl font-normal text-foreground">Welcome to Opndrive</h2>
+            <h2 className="text-2xl font-normal text-foreground">AWS UG Vadodara</h2>
 
             {/* Sync Button */}
             <AriaLabel
